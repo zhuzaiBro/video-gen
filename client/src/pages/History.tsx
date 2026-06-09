@@ -1,23 +1,35 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
+  Card,
+  Row,
+  Col,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Download, Trash2, Heart, Share2 } from "lucide-react";
+  Button,
+  Space,
+  Empty,
+  Popconfirm,
+  message,
+  Spin,
+  Tag,
+  Pagination,
+} from "antd";
+import {
+  DeleteOutlined,
+  HeartOutlined,
+  HeartFilled,
+  DownloadOutlined,
+  ShareAltOutlined,
+} from "@ant-design/icons";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 /**
- * Video history and management page
+ * Video history and management page with Ant Design
  */
 export default function History() {
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
 
   // Fetch personas for filter
   const { data: personas = [] } = trpc.personas.list.useQuery();
@@ -25,8 +37,8 @@ export default function History() {
   // Fetch generated videos
   const { data: videos = [], isLoading, refetch } = trpc.history.listVideos.useQuery({
     personaId: selectedPersonaId ? parseInt(selectedPersonaId) : undefined,
-    limit: 50,
-    offset: page * 50,
+    limit: 100,
+    offset: (page - 1) * pageSize,
   });
 
   // Mutations
@@ -51,168 +63,170 @@ export default function History() {
   });
 
   const handleDelete = (videoId: number) => {
-    if (confirm("Are you sure you want to delete this video?")) {
-      deleteVideo.mutate({ videoId });
-    }
+    deleteVideo.mutate({ videoId });
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading videos...</p>
-        </div>
-      </div>
-    );
-  }
+  const displayVideos = Array.isArray(videos) ? videos.slice(0, pageSize) : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12">
-      <div className="container mx-auto px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
-            Video History
-          </h1>
-          <p className="text-lg text-slate-600">
-            Browse and manage your generated videos
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Video History</h1>
+        <p className="text-gray-600 mt-2">
+          Browse and manage your generated videos
+        </p>
+      </div>
 
-        {/* Filters */}
-        <div className="mb-8 flex gap-4">
-          <div className="w-64">
-            <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by persona..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Personas</SelectItem>
-                {personas.map((persona: any) => (
-                  <SelectItem key={persona.id} value={persona.id.toString()}>
-                    {persona.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      {/* Filters */}
+      <Card className="shadow-sm">
+        <Row gutter={16}>
+          <Col xs={24} sm={12} md={8}>
+            <Select
+              placeholder="Filter by persona..."
+              value={selectedPersonaId}
+              onChange={setSelectedPersonaId}
+              style={{ width: "100%" }}
+              allowClear
+              options={[
+                { label: "All Personas", value: "" },
+                ...personas.map((p: any) => ({
+                  label: p.name,
+                  value: p.id.toString(),
+                })),
+              ]}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Button block>Search Videos</Button>
+          </Col>
+        </Row>
+      </Card>
 
-        {/* Videos Grid */}
-        {videos.length === 0 ? (
-          <Card className="p-12 text-center">
-            <p className="text-slate-600 mb-4">No videos yet</p>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              Generate Your First Video
-            </Button>
+      {/* Videos Grid */}
+      <Spin spinning={isLoading}>
+        {displayVideos.length === 0 ? (
+          <Card>
+            <Empty
+              description="No videos yet"
+              style={{ marginTop: 50, marginBottom: 50 }}
+            >
+              <Button type="primary" href="/generate">
+                Generate Your First Video
+              </Button>
+            </Empty>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {videos.map((video: any) => (
-              <Card key={video.id} className="overflow-hidden hover:shadow-lg transition">
-                {/* Video Thumbnail */}
-                <div className="aspect-video bg-slate-900 relative group">
-                  <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition flex items-center justify-center">
-                    <div className="text-white text-center">
-                      <p className="text-sm font-semibold mb-2">
-                        {video.resolution} • {video.aspectRatio}
-                      </p>
-                      <p className="text-xs text-slate-300">
-                        {video.duration || 8}s video
-                      </p>
+          <>
+            <Row gutter={[16, 16]}>
+              {displayVideos.map((video: any) => (
+                <Col key={video.id} xs={24} sm={12} lg={8}>
+                  <Card
+                    hoverable
+                    className="h-full flex flex-col"
+                    cover={
+                      <div className="aspect-video bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center text-white">
+                        <div className="text-center">
+                          <div className="text-2xl mb-2">🎬</div>
+                          <p className="text-sm">
+                            {video.resolution} • {video.aspectRatio}
+                          </p>
+                          <p className="text-xs text-gray-300">
+                            {video.duration || 8}s video
+                          </p>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <div className="flex-1 flex flex-col">
+                      <h3 className="font-semibold text-gray-900 mb-1 truncate">
+                        {video.title || "Untitled Video"}
+                      </h3>
+
+                      {video.description && (
+                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                          {video.description}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2 flex-wrap mb-4">
+                        <Tag>
+                          {new Date(video.createdAt).toLocaleDateString()}
+                        </Tag>
+                      </div>
+
+                      {/* Actions */}
+                      <Space direction="vertical" style={{ width: "100%" }}>
+                        <Button
+                          block
+                          icon={<DownloadOutlined />}
+                          onClick={() => {
+                            toast.info("Download feature coming soon");
+                          }}
+                        >
+                          Download
+                        </Button>
+
+                        <div className="flex gap-2">
+                          <Button
+                            className="flex-1"
+                            icon={
+                              video.isFavorite ? (
+                                <HeartFilled className="text-red-500" />
+                              ) : (
+                                <HeartOutlined />
+                              )
+                            }
+                            onClick={() =>
+                              toggleFavorite.mutate({ videoId: video.id })
+                            }
+                          >
+                            {video.isFavorite ? "Favorited" : "Favorite"}
+                          </Button>
+
+                          <Button
+                            icon={<ShareAltOutlined />}
+                            onClick={() => {
+                              toast.info("Share feature coming soon");
+                            }}
+                          />
+
+                          <Popconfirm
+                            title="Delete Video"
+                            description="Are you sure you want to delete this video?"
+                            onConfirm={() => handleDelete(video.id)}
+                            okText="Yes"
+                            cancelText="No"
+                          >
+                            <Button
+                              danger
+                              icon={<DeleteOutlined />}
+                              loading={deleteVideo.isPending}
+                            />
+                          </Popconfirm>
+                        </div>
+                      </Space>
                     </div>
-                  </div>
-                </div>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
 
-                {/* Video Info */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-slate-900 mb-1 truncate">
-                    {video.title || "Untitled Video"}
-                  </h3>
-                  {video.description && (
-                    <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                      {video.description}
-                    </p>
-                  )}
-
-                  <div className="flex gap-2 flex-wrap mb-4">
-                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded">
-                      {new Date(video.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        // Download video
-                        toast.info("Download feature coming soon");
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-1" />
-                      Download
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleFavorite.mutate({ videoId: video.id })}
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${
-                          video.isFavorite ? "fill-red-500 text-red-500" : ""
-                        }`}
-                      />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        // Share video
-                        toast.info("Share feature coming soon");
-                      }}
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(video.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+            {/* Pagination */}
+            {displayVideos.length > 0 && (
+              <div className="flex justify-center mt-8">
+                <Pagination
+                  current={page}
+                  pageSize={pageSize}
+                  total={Array.isArray(videos) ? videos.length : 0}
+                  onChange={setPage}
+                  showSizeChanger={false}
+                />
+              </div>
+            )}
+          </>
         )}
-
-        {/* Pagination */}
-        {videos.length > 0 && (
-          <div className="flex justify-center gap-4 mt-12">
-            <Button
-              variant="outline"
-              onClick={() => setPage(Math.max(0, page - 1))}
-              disabled={page === 0}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setPage(page + 1)}
-              disabled={videos.length < 50}
-            >
-              Next
-            </Button>
-          </div>
-        )}
-      </div>
+      </Spin>
     </div>
   );
 }

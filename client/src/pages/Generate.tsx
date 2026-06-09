@@ -1,28 +1,32 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
+  Card,
+  Tabs,
+  Form,
+  Input,
+  Button,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Upload, Zap } from "lucide-react";
+  Slider,
+  Space,
+  Row,
+  Col,
+  Upload,
+  message,
+  Spin,
+} from "antd";
+import {
+  PlusOutlined,
+  UploadOutlined,
+  PlayCircleOutlined,
+} from "@ant-design/icons";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 /**
- * Video generation page with three modes:
- * 1. Prompt-based generation
- * 2. Reference image-based generation
- * 3. Persona Agent generation
+ * Video generation page with three modes using Ant Design
  */
 export default function Generate() {
+  const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState("prompt");
 
   // Prompt mode state
@@ -36,30 +40,19 @@ export default function Generate() {
   // Reference image mode state
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [referencePrompt, setReferencePrompt] = useState("");
-  const [referenceParams, setReferenceParams] = useState({
-    duration: 8,
-    resolution: "720p" as "720p" | "1080p" | "4K",
-    aspectRatio: "16:9" as "16:9" | "9:16",
-  });
 
   // Persona mode state
   const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null);
   const [personaPrompt, setPersonaPrompt] = useState("");
-  const [personaParams, setPersonaParams] = useState({
-    duration: 8,
-    resolution: "720p" as "720p" | "1080p" | "4K",
-    aspectRatio: "16:9" as "16:9" | "9:16",
-  });
 
-  // Fetch personas for agent mode
+  // Fetch personas
   const { data: personas = [] } = trpc.personas.list.useQuery();
 
   // Mutations
   const generateFromPrompt = trpc.videoGeneration.generateFromPrompt.useMutation({
-    onSuccess: (task) => {
+    onSuccess: () => {
       toast.success("Video generation started!");
       setPromptInput("");
-      // Navigate to task detail or show task in queue
     },
     onError: (error) => {
       toast.error(error.message || "Failed to generate video");
@@ -68,7 +61,7 @@ export default function Generate() {
 
   const generateFromReferenceImages =
     trpc.videoGeneration.generateFromReferenceImages.useMutation({
-      onSuccess: (task) => {
+      onSuccess: () => {
         toast.success("Video generation started!");
         setReferencePrompt("");
         setReferenceImages([]);
@@ -80,7 +73,7 @@ export default function Generate() {
 
   const generateFromPersona =
     trpc.videoGeneration.generateFromPersona.useMutation({
-      onSuccess: (task) => {
+      onSuccess: () => {
         toast.success("Video generation started!");
         setPersonaPrompt("");
       },
@@ -91,7 +84,7 @@ export default function Generate() {
 
   const handleGenerateFromPrompt = async () => {
     if (!promptInput.trim()) {
-      toast.error("Please enter a prompt");
+      message.error("Please enter a prompt");
       return;
     }
 
@@ -103,395 +96,348 @@ export default function Generate() {
 
   const handleGenerateFromReferenceImages = async () => {
     if (!referencePrompt.trim()) {
-      toast.error("Please enter a prompt");
+      message.error("Please enter a prompt");
       return;
     }
 
     if (referenceImages.length === 0) {
-      toast.error("Please upload at least one reference image");
+      message.error("Please upload at least one reference image");
       return;
     }
 
     await generateFromReferenceImages.mutateAsync({
       prompt: referencePrompt,
       referenceImageUrls: referenceImages,
-      ...referenceParams,
+      duration: promptParams.duration,
+      resolution: promptParams.resolution,
+      aspectRatio: promptParams.aspectRatio,
     });
   };
 
   const handleGenerateFromPersona = async () => {
     if (!selectedPersonaId) {
-      toast.error("Please select a persona");
+      message.error("Please select a persona");
       return;
     }
 
     await generateFromPersona.mutateAsync({
       personaId: selectedPersonaId,
       userPrompt: personaPrompt,
-      ...personaParams,
+      duration: promptParams.duration,
+      resolution: promptParams.resolution,
+      aspectRatio: promptParams.aspectRatio,
     });
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 py-12">
-      <div className="container mx-auto px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
-            Generate Videos
-          </h1>
-          <p className="text-lg text-slate-600">
-            Choose a generation mode and create stunning videos with Gemini Veo 3.1
-          </p>
-        </div>
+  const tabItems = [
+    {
+      key: "prompt",
+      label: "📝 Prompt Mode",
+      children: (
+        <Card className="mt-4">
+          <Form layout="vertical" className="space-y-4">
+            <Form.Item
+              label="Video Prompt"
+              required
+              tooltip="Describe the video you want to generate. Be specific about actions, emotions, and visual style."
+            >
+              <Input.TextArea
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                placeholder="Describe the video you want to generate..."
+                rows={6}
+              />
+            </Form.Item>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 max-w-md">
-            <TabsTrigger value="prompt">Prompt</TabsTrigger>
-            <TabsTrigger value="reference">Reference</TabsTrigger>
-            <TabsTrigger value="persona">Persona</TabsTrigger>
-          </TabsList>
-
-          {/* Prompt Mode */}
-          <TabsContent value="prompt" className="mt-8">
-            <Card className="p-8 max-w-2xl">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                Generate from Prompt
-              </h2>
-
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="prompt">Video Prompt *</Label>
-                  <Textarea
-                    id="prompt"
-                    value={promptInput}
-                    onChange={(e) => setPromptInput(e.target.value)}
-                    placeholder="Describe the video you want to generate. Be specific about actions, emotions, and visual style..."
-                    rows={6}
-                    className="mt-2"
-                  />
-                  <p className="text-sm text-slate-500 mt-2">
-                    Minimum 10 characters. Be detailed for best results.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="duration">Duration (seconds)</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      min="1"
-                      max="8"
-                      value={promptParams.duration}
-                      onChange={(e) =>
-                        setPromptParams({
-                          ...promptParams,
-                          duration: parseInt(e.target.value),
-                        })
-                      }
-                      className="mt-2"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="resolution">Resolution</Label>
-                    <Select
-                      value={promptParams.resolution}
-                      onValueChange={(value) =>
-                        setPromptParams({
-                          ...promptParams,
-                          resolution: value as "720p" | "1080p" | "4K",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="resolution" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="720p">720p</SelectItem>
-                        <SelectItem value="1080p">1080p</SelectItem>
-                        <SelectItem value="4K">4K</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="aspectRatio">Aspect Ratio</Label>
-                    <Select
-                      value={promptParams.aspectRatio}
-                      onValueChange={(value) =>
-                        setPromptParams({
-                          ...promptParams,
-                          aspectRatio: value as "16:9" | "9:16",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="aspectRatio" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
-                        <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleGenerateFromPrompt}
-                  disabled={generateFromPrompt.isPending || !promptInput.trim()}
-                  className="w-full bg-blue-600 hover:bg-blue-700 py-6 text-lg"
-                >
-                  <Zap className="w-5 h-5 mr-2" />
-                  {generateFromPrompt.isPending
-                    ? "Generating..."
-                    : "Generate Video"}
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Reference Image Mode */}
-          <TabsContent value="reference" className="mt-8">
-            <Card className="p-8 max-w-2xl">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                Generate from Reference Images
-              </h2>
-
-              <div className="space-y-6">
-                <div>
-                  <Label>Reference Images (up to 3)</Label>
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center mt-2">
-                    <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                    <p className="text-slate-600 mb-2">
-                      Drag and drop images here or click to upload
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      PNG, JPG up to 10MB. Upload up to 3 images.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="refPrompt">Video Prompt *</Label>
-                  <Textarea
-                    id="refPrompt"
-                    value={referencePrompt}
-                    onChange={(e) => setReferencePrompt(e.target.value)}
-                    placeholder="Describe how the reference images should guide the video generation..."
-                    rows={6}
-                    className="mt-2"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="refDuration">Duration (seconds)</Label>
-                    <Input
-                      id="refDuration"
-                      type="number"
-                      min="1"
-                      max="8"
-                      value={referenceParams.duration}
-                      onChange={(e) =>
-                        setReferenceParams({
-                          ...referenceParams,
-                          duration: parseInt(e.target.value),
-                        })
-                      }
-                      className="mt-2"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="refResolution">Resolution</Label>
-                    <Select
-                      value={referenceParams.resolution}
-                      onValueChange={(value) =>
-                        setReferenceParams({
-                          ...referenceParams,
-                          resolution: value as "720p" | "1080p" | "4K",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="refResolution" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="720p">720p</SelectItem>
-                        <SelectItem value="1080p">1080p</SelectItem>
-                        <SelectItem value="4K">4K</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="refAspectRatio">Aspect Ratio</Label>
-                    <Select
-                      value={referenceParams.aspectRatio}
-                      onValueChange={(value) =>
-                        setReferenceParams({
-                          ...referenceParams,
-                          aspectRatio: value as "16:9" | "9:16",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="refAspectRatio" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
-                        <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleGenerateFromReferenceImages}
-                  disabled={
-                    generateFromReferenceImages.isPending ||
-                    !referencePrompt.trim() ||
-                    referenceImages.length === 0
-                  }
-                  className="w-full bg-purple-600 hover:bg-purple-700 py-6 text-lg"
-                >
-                  <Zap className="w-5 h-5 mr-2" />
-                  {generateFromReferenceImages.isPending
-                    ? "Generating..."
-                    : "Generate Video"}
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Persona Agent Mode */}
-          <TabsContent value="persona" className="mt-8">
-            <Card className="p-8 max-w-2xl">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                Generate from Persona (Agent Mode)
-              </h2>
-
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="persona">Select Persona *</Label>
-                  <Select
-                    value={selectedPersonaId?.toString() || ""}
-                    onValueChange={(value) =>
-                      setSelectedPersonaId(parseInt(value))
+            <Row gutter={16}>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Duration (seconds)">
+                  <Slider
+                    min={1}
+                    max={8}
+                    value={promptParams.duration}
+                    onChange={(value) =>
+                      setPromptParams({ ...promptParams, duration: value })
                     }
-                  >
-                    <SelectTrigger id="persona" className="mt-2">
-                      <SelectValue placeholder="Choose a persona..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {personas.map((persona: any) => (
-                        <SelectItem key={persona.id} value={persona.id.toString()}>
-                          {persona.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {personas.length === 0 && (
-                    <p className="text-sm text-slate-500 mt-2">
-                      No personas available. Create one first.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="personaPrompt">Additional Direction (Optional)</Label>
-                  <Textarea
-                    id="personaPrompt"
-                    value={personaPrompt}
-                    onChange={(e) => setPersonaPrompt(e.target.value)}
-                    placeholder="Add any additional direction for the video. The AI will combine this with the persona's attributes..."
-                    rows={6}
-                    className="mt-2"
+                    marks={{ 1: "1s", 4: "4s", 8: "8s" }}
                   />
-                  <p className="text-sm text-slate-500 mt-2">
-                    The AI will automatically expand the persona's attributes into a detailed prompt.
-                  </p>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Form.Item label="Resolution">
+                  <Select
+                    value={promptParams.resolution}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        resolution: value,
+                      })
+                    }
+                    options={[
+                      { label: "720p", value: "720p" },
+                      { label: "1080p", value: "1080p" },
+                      { label: "4K", value: "4K" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Form.Item label="Aspect Ratio">
+                  <Select
+                    value={promptParams.aspectRatio}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        aspectRatio: value,
+                      })
+                    }
+                    options={[
+                      { label: "16:9 (Landscape)", value: "16:9" },
+                      { label: "9:16 (Portrait)", value: "9:16" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Button
+              type="primary"
+              size="large"
+              block
+              icon={<PlayCircleOutlined />}
+              loading={generateFromPrompt.isPending}
+              onClick={handleGenerateFromPrompt}
+              disabled={!promptInput.trim()}
+            >
+              Generate Video
+            </Button>
+          </Form>
+        </Card>
+      ),
+    },
+    {
+      key: "reference",
+      label: "🖼️ Reference Image Mode",
+      children: (
+        <Card className="mt-4">
+          <Form layout="vertical" className="space-y-4">
+            <Form.Item
+              label="Reference Images (up to 3)"
+              tooltip="Upload images to guide the video generation"
+            >
+              <Upload
+                listType="picture-card"
+                maxCount={3}
+                beforeUpload={() => false}
+              >
+                <div>
+                  <UploadOutlined />
+                  <div style={{ marginTop: 8 }}>Upload</div>
                 </div>
+              </Upload>
+            </Form.Item>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="personaDuration">Duration (seconds)</Label>
-                    <Input
-                      id="personaDuration"
-                      type="number"
-                      min="1"
-                      max="8"
-                      value={personaParams.duration}
-                      onChange={(e) =>
-                        setPersonaParams({
-                          ...personaParams,
-                          duration: parseInt(e.target.value),
-                        })
-                      }
-                      className="mt-2"
-                    />
-                  </div>
+            <Form.Item label="Video Prompt" required>
+              <Input.TextArea
+                value={referencePrompt}
+                onChange={(e) => setReferencePrompt(e.target.value)}
+                placeholder="Describe how the reference images should guide the video generation..."
+                rows={6}
+              />
+            </Form.Item>
 
-                  <div>
-                    <Label htmlFor="personaResolution">Resolution</Label>
-                    <Select
-                      value={personaParams.resolution}
-                      onValueChange={(value) =>
-                        setPersonaParams({
-                          ...personaParams,
-                          resolution: value as "720p" | "1080p" | "4K",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="personaResolution" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="720p">720p</SelectItem>
-                        <SelectItem value="1080p">1080p</SelectItem>
-                        <SelectItem value="4K">4K</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <Row gutter={16}>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Duration (seconds)">
+                  <Slider
+                    min={1}
+                    max={8}
+                    value={promptParams.duration}
+                    onChange={(value) =>
+                      setPromptParams({ ...promptParams, duration: value })
+                    }
+                    marks={{ 1: "1s", 4: "4s", 8: "8s" }}
+                  />
+                </Form.Item>
+              </Col>
 
-                  <div>
-                    <Label htmlFor="personaAspectRatio">Aspect Ratio</Label>
-                    <Select
-                      value={personaParams.aspectRatio}
-                      onValueChange={(value) =>
-                        setPersonaParams({
-                          ...personaParams,
-                          aspectRatio: value as "16:9" | "9:16",
-                        })
-                      }
-                    >
-                      <SelectTrigger id="personaAspectRatio" className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="16:9">16:9 (Landscape)</SelectItem>
-                        <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Resolution">
+                  <Select
+                    value={promptParams.resolution}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        resolution: value,
+                      })
+                    }
+                    options={[
+                      { label: "720p", value: "720p" },
+                      { label: "1080p", value: "1080p" },
+                      { label: "4K", value: "4K" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
 
-                <Button
-                  onClick={handleGenerateFromPersona}
-                  disabled={generateFromPersona.isPending || !selectedPersonaId}
-                  className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg"
-                >
-                  <Zap className="w-5 h-5 mr-2" />
-                  {generateFromPersona.isPending
-                    ? "Generating..."
-                    : "Generate with Persona Agent"}
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Aspect Ratio">
+                  <Select
+                    value={promptParams.aspectRatio}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        aspectRatio: value,
+                      })
+                    }
+                    options={[
+                      { label: "16:9 (Landscape)", value: "16:9" },
+                      { label: "9:16 (Portrait)", value: "9:16" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Button
+              type="primary"
+              size="large"
+              block
+              icon={<PlayCircleOutlined />}
+              loading={generateFromReferenceImages.isPending}
+              onClick={handleGenerateFromReferenceImages}
+              disabled={!referencePrompt.trim() || referenceImages.length === 0}
+            >
+              Generate Video
+            </Button>
+          </Form>
+        </Card>
+      ),
+    },
+    {
+      key: "persona",
+      label: "🤖 Persona Agent Mode",
+      children: (
+        <Card className="mt-4">
+          <Form layout="vertical" className="space-y-4">
+            <Form.Item label="Select Persona" required>
+              <Select
+                placeholder="Choose a persona..."
+                value={selectedPersonaId}
+                onChange={setSelectedPersonaId}
+                options={personas.map((p: any) => ({
+                  label: p.name,
+                  value: p.id,
+                }))}
+              />
+              {personas.length === 0 && (
+                <p className="text-red-500 text-sm mt-2">
+                  No personas available. Create one first.
+                </p>
+              )}
+            </Form.Item>
+
+            <Form.Item label="Additional Direction (Optional)">
+              <Input.TextArea
+                value={personaPrompt}
+                onChange={(e) => setPersonaPrompt(e.target.value)}
+                placeholder="Add any additional direction for the video. The AI will combine this with the persona's attributes..."
+                rows={6}
+              />
+              <p className="text-gray-500 text-sm mt-2">
+                The AI will automatically expand the persona's attributes into a detailed prompt.
+              </p>
+            </Form.Item>
+
+            <Row gutter={16}>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Duration (seconds)">
+                  <Slider
+                    min={1}
+                    max={8}
+                    value={promptParams.duration}
+                    onChange={(value) =>
+                      setPromptParams({ ...promptParams, duration: value })
+                    }
+                    marks={{ 1: "1s", 4: "4s", 8: "8s" }}
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Form.Item label="Resolution">
+                  <Select
+                    value={promptParams.resolution}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        resolution: value,
+                      })
+                    }
+                    options={[
+                      { label: "720p", value: "720p" },
+                      { label: "1080p", value: "1080p" },
+                      { label: "4K", value: "4K" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Form.Item label="Aspect Ratio">
+                  <Select
+                    value={promptParams.aspectRatio}
+                    onChange={(value) =>
+                      setPromptParams({
+                        ...promptParams,
+                        aspectRatio: value,
+                      })
+                    }
+                    options={[
+                      { label: "16:9 (Landscape)", value: "16:9" },
+                      { label: "9:16 (Portrait)", value: "9:16" },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Button
+              type="primary"
+              size="large"
+              block
+              icon={<PlayCircleOutlined />}
+              loading={generateFromPersona.isPending}
+              onClick={handleGenerateFromPersona}
+              disabled={!selectedPersonaId}
+            >
+              Generate with Persona Agent
+            </Button>
+          </Form>
+        </Card>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Generate Videos</h1>
+        <p className="text-gray-600 mt-2">
+          Choose a generation mode and create stunning videos with Gemini Veo 3.1
+        </p>
       </div>
+
+      <Card className="shadow-sm">
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={tabItems}
+          size="large"
+        />
+      </Card>
     </div>
   );
 }
