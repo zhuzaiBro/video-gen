@@ -1,5 +1,13 @@
 {
   "version": "7",
-  "dialect": "mysql",
-  "entries": []
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1780986562197,
+      "tag": "0000_nice_darkhawk",
+      "breakpoints": true
+    }
+  ]
 }
