@@ -162,6 +162,7 @@ export const videoScripts = pgTable("video_scripts", {
   errorMessage: text("errorMessage"),
   metadata: json("metadata"),
   continuityEnabled: boolean("continuityEnabled").default(true).notNull(),
+  bottomBarrageEnabled: boolean("bottomBarrageEnabled").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Search, Trash2, Video, Merge, Loader2, ExternalLink, PenLine, Sparkles, TrendingUp, Flame } from "lucide-react";
+import { Link, Search, Trash2, Video, Merge, Loader2, ExternalLink, PenLine, Sparkles, TrendingUp, Flame, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 import { api, type Persona, type ScriptSegments, type TechTopic, type TechTopicSearchRecord, type VideoScript, type VideoTask } from "@/lib/api";
 import { toast } from "sonner";
@@ -38,7 +38,13 @@ function formatTime(value: string) {
 
 function formatPlatform(platform: string) {
   if (platform === "tech-topic") return "技术选题";
+  if (platform === "markdown") return "Markdown";
   return platform;
+}
+
+function formatSourceUrl(sourceUrl: string) {
+  if (sourceUrl.startsWith("markdown://")) return "Markdown 导入";
+  return sourceUrl;
 }
 
 function estimateMinutes(params: GenParams): { low: number; high: number } {
@@ -66,6 +72,8 @@ function SegmentGenPanel({
   segmentEstimate,
   continuityEnabled,
   setContinuityEnabled,
+  bottomBarrageEnabled,
+  setBottomBarrageEnabled,
   genPersonaId,
   setGenPersonaId,
   genParams,
@@ -84,6 +92,8 @@ function SegmentGenPanel({
   segmentEstimate: { totalSec: number; count: number; low: number; high: number } | null;
   continuityEnabled: boolean;
   setContinuityEnabled: (v: boolean) => void;
+  bottomBarrageEnabled: boolean;
+  setBottomBarrageEnabled: (v: boolean) => void;
   genPersonaId: number | undefined;
   setGenPersonaId: (v: number) => void;
   genParams: GenParams;
@@ -166,6 +176,20 @@ function SegmentGenPanel({
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-2 cursor-pointer text-xs text-gray-400">
+          <input
+            type="checkbox"
+            checked={bottomBarrageEnabled}
+            onChange={(e) => setBottomBarrageEnabled(e.target.checked)}
+            className="accent-[#55efc4] mt-0.5"
+          />
+          <span>
+            <span className="text-gray-300">底部弹幕</span>
+            <span className="block text-[10px] text-gray-500 mt-0.5">
+              整合成片时按口播分页轮播字幕（自动换行缩字），距底约 80px，长文案可完整看完
+            </span>
+          </span>
+        </label>
         {segmentEstimate && (
           <p className="text-[10px] text-gray-500">
             待生成 {segmentEstimate.count} 段
@@ -222,6 +246,7 @@ export default function Scripts() {
   const [confirmAllOpen, setConfirmAllOpen] = useState(false);
   const [generatingSegmentIndex, setGeneratingSegmentIndex] = useState<number | null>(null);
   const [continuityEnabled, setContinuityEnabled] = useState(true);
+  const [bottomBarrageEnabled, setBottomBarrageEnabled] = useState(false);
   const [techQuery, setTechQuery] = useState("");
   const [techTopics, setTechTopics] = useState<TechTopic[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
@@ -229,12 +254,29 @@ export default function Scripts() {
   const [techExtraQuery, setTechExtraQuery] = useState("");
   const [techTargetDuration, setTechTargetDuration] = useState(90);
   const [activeSearchRecordId, setActiveSearchRecordId] = useState<number | null>(null);
+  const [mdContent, setMdContent] = useState("");
+  const [mdTitle, setMdTitle] = useState("");
+  const [mdPersonaId, setMdPersonaId] = useState<number | undefined>();
+  const [mdTargetDuration, setMdTargetDuration] = useState(90);
+  const [mdExtraNotes, setMdExtraNotes] = useState("");
 
   const selectedTopic = techTopics.find((t) => t.id === selectedTopicId) ?? null;
 
   const updateContinuityMutation = useMutation({
     mutationFn: ({ scriptId, enabled }: { scriptId: number; enabled: boolean }) =>
       api.patch<VideoScript>(`/scripts/${scriptId}`, { continuityEnabled: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["video-scripts"] });
+      if (selectedId != null) {
+        queryClient.invalidateQueries({ queryKey: ["script-segments", selectedId] });
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateBottomBarrageMutation = useMutation({
+    mutationFn: ({ scriptId, enabled }: { scriptId: number; enabled: boolean }) =>
+      api.patch<VideoScript>(`/scripts/${scriptId}`, { bottomBarrageEnabled: enabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["video-scripts"] });
       if (selectedId != null) {
@@ -269,6 +311,13 @@ export default function Scripts() {
     setContinuityEnabled(enabled);
     if (selectedId != null) {
       updateContinuityMutation.mutate({ scriptId: selectedId, enabled });
+    }
+  };
+
+  const handleBottomBarrageChange = (enabled: boolean) => {
+    setBottomBarrageEnabled(enabled);
+    if (selectedId != null) {
+      updateBottomBarrageMutation.mutate({ scriptId: selectedId, enabled });
     }
   };
 
@@ -327,6 +376,11 @@ export default function Scripts() {
     if (value != null) setContinuityEnabled(value);
   }, [selected?.id, selected?.continuityEnabled, segmentData?.continuityEnabled]);
 
+  useEffect(() => {
+    const value = segmentData?.bottomBarrageEnabled ?? selected?.bottomBarrageEnabled;
+    if (value != null) setBottomBarrageEnabled(value);
+  }, [selected?.id, selected?.bottomBarrageEnabled, segmentData?.bottomBarrageEnabled]);
+
   const analyzeMutation = useMutation({
     mutationFn: () =>
       api.post<VideoScript>("/scripts/analyze", {
@@ -374,6 +428,26 @@ export default function Scripts() {
     setSelectedTopicId(record.topics[0]?.id ?? null);
     setActiveSearchRecordId(record.id);
   };
+
+  const mdScriptMutation = useMutation({
+    mutationFn: () =>
+      api.post<VideoScript>("/scripts/from-markdown", {
+        markdown: mdContent.trim(),
+        title: mdTitle.trim() || undefined,
+        personaId: mdPersonaId,
+        targetDurationSec: mdTargetDuration,
+        extraNotes: mdExtraNotes.trim() || undefined,
+      }),
+    onSuccess: (data) => {
+      toast.success("已开始将 Markdown 拆解为分镜脚本");
+      setMdContent("");
+      setMdTitle("");
+      setMdExtraNotes("");
+      setSelectedId(data.id);
+      queryClient.invalidateQueries({ queryKey: ["video-scripts"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const techScriptMutation = useMutation({
     mutationFn: () =>
@@ -494,7 +568,7 @@ export default function Scripts() {
     <ComfyPage>
       <ComfyPageHeader
         title="脚本拆解"
-        subtitle="从视频 URL 拆解口播，或搜索程序员热门技术话题并生成有深度的讲解脚本"
+        subtitle="从视频 URL 拆解口播、Markdown 转分镜脚本，或搜索热门技术话题生成讲解稿"
       />
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -729,6 +803,80 @@ export default function Scripts() {
       </NodeCard>
       </div>
 
+      <NodeCard title="Markdown 转脚本" accent="#55efc4">
+        <div className="space-y-3">
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            粘贴口播稿、分镜大纲或讲解提纲（支持标题、列表、分段）。AI 将拆解为与视频拆解相同的分镜结构（口播 + 画面描述 + 贴图位）。
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <NodeField label="标题（可选）">
+              <input
+                className={inputClass}
+                placeholder="如：空洞骑士手游测评"
+                value={mdTitle}
+                onChange={(e) => setMdTitle(e.target.value)}
+              />
+            </NodeField>
+            <NodeField label="目标时长（秒）">
+              <input
+                className={inputClass}
+                type="number"
+                min={30}
+                max={300}
+                value={mdTargetDuration}
+                onChange={(e) => setMdTargetDuration(Number(e.target.value) || 90)}
+              />
+            </NodeField>
+            <NodeField label="关联人设（可选）">
+              <select
+                className={selectClass}
+                value={mdPersonaId ?? ""}
+                onChange={(e) => setMdPersonaId(e.target.value ? Number(e.target.value) : undefined)}
+              >
+                <option value="">不关联</option>
+                {personas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </NodeField>
+            <NodeField label="额外要求（可选）">
+              <input
+                className={inputClass}
+                placeholder="如：语气更口语、多分几镜"
+                value={mdExtraNotes}
+                onChange={(e) => setMdExtraNotes(e.target.value)}
+              />
+            </NodeField>
+          </div>
+          <NodeField label="Markdown 内容">
+            <textarea
+              className={cn(inputClass, "min-h-[160px] resize-y font-mono text-xs leading-relaxed")}
+              placeholder={`# 空洞骑士手游测评\n\n## 开场\n大家好，今天聊聊...\n\n## 分镜1\n- 口播：...\n- 画面：出镜者坐在书桌前，举起手机展示游戏界面`}
+              value={mdContent}
+              onChange={(e) => setMdContent(e.target.value)}
+            />
+          </NodeField>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-gray-600">{mdContent.trim().length} / 80000 字</p>
+            <button
+              type="button"
+              className={btnPrimaryClass}
+              disabled={mdContent.trim().length < 20 || mdScriptMutation.isPending}
+              onClick={() => mdScriptMutation.mutate()}
+            >
+              {mdScriptMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileText className="w-4 h-4" />
+              )}
+              拆解 Markdown
+            </button>
+          </div>
+        </div>
+      </NodeCard>
+
       <NodeCard title="拆解记录" accent="#74b9ff">
         {isLoading ? (
           <div className="flex justify-center py-12">
@@ -760,7 +908,7 @@ export default function Scripts() {
 
                 <div className="flex-1 p-3 space-y-2 min-h-0">
                   <p className="text-[10px] text-gray-600 truncate font-mono" title={item.sourceUrl}>
-                    {item.sourceUrl}
+                    {formatSourceUrl(item.sourceUrl)}
                   </p>
                   {item.summary ? (
                     <p className="text-[11px] text-gray-400 line-clamp-3 leading-relaxed">{item.summary}</p>
@@ -908,6 +1056,8 @@ export default function Scripts() {
                 segmentEstimate={segmentEstimate}
                 continuityEnabled={continuityEnabled}
                 setContinuityEnabled={handleContinuityChange}
+                bottomBarrageEnabled={bottomBarrageEnabled}
+                setBottomBarrageEnabled={handleBottomBarrageChange}
                 genPersonaId={genPersonaId}
                 setGenPersonaId={handleGenPersonaChange}
                 genParams={genParams}

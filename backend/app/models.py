@@ -154,6 +154,9 @@ class VideoScript(Base):
     continuity_enabled: Mapped[bool] = mapped_column(
         "continuityEnabled", Boolean, server_default="true", nullable=False
     )
+    bottom_barrage_enabled: Mapped[bool] = mapped_column(
+        "bottomBarrageEnabled", Boolean, server_default="false", nullable=False
+    )
     active_assembly_id: Mapped[int | None] = mapped_column(
         "activeAssemblyId", ForeignKey("script_assemblies.id", ondelete="SET NULL")
     )

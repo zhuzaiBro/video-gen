@@ -167,6 +167,7 @@ export type VideoScript = {
   errorMessage?: string | null;
   metadata?: Record<string, unknown> | null;
   continuityEnabled?: boolean;
+  bottomBarrageEnabled?: boolean;
   scriptDurationSec?: number | null;
   recommendedDurationSec?: number | null;
   maxKlingDurationSec?: number | null;
@@ -270,6 +271,7 @@ export type ScriptSegments = {
   segments: ScriptSegment[];
   assemblyOrder?: number[];
   continuityEnabled?: boolean;
+  bottomBarrageEnabled?: boolean;
   assembledVideoUrl?: string | null;
   allSegmentsReady: boolean;
   maxKlingDurationSec?: number;

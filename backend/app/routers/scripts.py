@@ -19,6 +19,7 @@ from app.schemas import (
     ScriptSegmentOut,
     ScriptSegmentPrepareFrameIn,
     ScriptSegmentPrepareFrameOut,
+    ScriptFromMarkdownIn,
     ScriptSegmentUpdateIn,
     ScriptSegmentsOut,
     PersonaImagePresignIn,
@@ -37,6 +38,7 @@ from app.services.cos import CosNotConfiguredError, create_script_artboard_uploa
 from app.services.kling import KlingApiError, KlingRuntimeConfig
 from app.services.kling_config import get_kling_config
 from app.services.script_extraction import run_script_analysis
+from app.services.script_from_markdown import _slug_from_title, run_script_from_markdown
 from app.services.script_from_topic import run_script_from_topic
 from app.services.tech_topics import TechTopicError, search_hot_tech_topics
 from app.services.qwen import QwenError
@@ -307,6 +309,50 @@ async def create_script_from_tech_topic(
     return _script_to_out(script, model_name=model_name)
 
 
+@router.post("/from-markdown", response_model=VideoScriptOut, status_code=status.HTTP_201_CREATED)
+async def create_script_from_markdown(
+    body: ScriptFromMarkdownIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VideoScript:
+    markdown = body.markdown.strip()
+    if not markdown:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Markdown 内容不能为空")
+
+    if body.persona_id is not None:
+        persona_result = await db.execute(select(Persona).where(Persona.id == body.persona_id))
+        persona = persona_result.scalar_one_or_none()
+        if not persona or persona.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="人设不存在")
+
+    title_hint = (body.title or "").strip() or None
+    slug = _slug_from_title(title_hint or markdown[:80])
+    script = VideoScript(
+        user_id=user.id,
+        persona_id=body.persona_id,
+        source_url=f"markdown://{slug}",
+        platform="markdown",
+        title=title_hint or "Markdown 脚本",
+        status="pending",
+        extra_metadata={"sourceType": "markdown"},
+    )
+    db.add(script)
+    await db.commit()
+    await db.refresh(script)
+
+    asyncio.create_task(
+        run_script_from_markdown(
+            script.id,
+            markdown=markdown,
+            title_hint=title_hint,
+            target_duration_sec=body.target_duration_sec,
+            extra_notes=body.extra_notes,
+        )
+    )
+    model_name = await _get_kling_model_name(db, user.id)
+    return _script_to_out(script, model_name=model_name)
+
+
 @router.get("", response_model=list[VideoScriptOut])
 async def list_video_scripts(
     user: User = Depends(get_current_user),
@@ -407,6 +453,8 @@ async def update_video_script(
         script.extra_metadata = meta
     if body.continuity_enabled is not None:
         script.continuity_enabled = body.continuity_enabled
+    if body.bottom_barrage_enabled is not None:
+        script.bottom_barrage_enabled = body.bottom_barrage_enabled
     if "persona_id" in body.model_fields_set:
         if body.persona_id is not None:
             persona_result = await db.execute(select(Persona).where(Persona.id == body.persona_id))
@@ -618,6 +666,7 @@ def _build_segments_out(script: VideoScript, *, model_name: str) -> ScriptSegmen
         segments=segment_rows,
         assembly_order=order,
         continuity_enabled=bool(getattr(script, "continuity_enabled", True)),
+        bottom_barrage_enabled=bool(getattr(script, "bottom_barrage_enabled", False)),
         assembled_video_url=assembled.get("videoUrl") if assembled else None,
         all_segments_ready=all_ready,
         max_kling_duration_sec=max_kling,
@@ -1403,7 +1452,9 @@ async def assemble_script_video(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有可整合的分镜")
 
     tasks = get_segment_tasks(script)
+    spoken_by_index = {seg.index: (seg.spoken_text or "").strip() for seg in segments}
     video_urls: list[str] = []
+    barrage_captions: list[str] = []
     for idx in segment_order:
         info = tasks.get(str(idx), {})
         if info.get("status") != "completed" or not info.get("videoUrl"):
@@ -1412,14 +1463,20 @@ async def assemble_script_video(
                 detail=f"分镜 #{idx} 尚未生成完成，无法整合",
             )
         video_urls.append(info["videoUrl"])
+        barrage_captions.append(spoken_by_index.get(idx, ""))
 
     script_id_val = script.id
+    bottom_barrage_enabled = bool(getattr(script, "bottom_barrage_enabled", False))
 
     # 下载 + ffmpeg 可能耗时较长，先释放 DB 连接避免 Supabase 池回收导致 commit 失败
     await db.close()
 
     try:
-        result = await assemble_videos_from_urls(video_urls, script_id=script_id_val)
+        result = await assemble_videos_from_urls(
+            video_urls,
+            script_id=script_id_val,
+            bottom_barrage_captions=barrage_captions if bottom_barrage_enabled else None,
+        )
     except VideoAssemblyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -1427,7 +1484,11 @@ async def assemble_script_video(
     async with factory() as write_db:
         script = await _get_owned_script(write_db, script_id_val, user.id)
         meta = dict(script.extra_metadata or {})
-        meta["assembled"] = {"videoUrl": result["public_url"], "key": result["key"]}
+        meta["assembled"] = {
+            "videoUrl": result["public_url"],
+            "key": result["key"],
+            "bottomBarrageEnabled": bottom_barrage_enabled,
+        }
         script.extra_metadata = meta
         script.updated_at = utc_now()
         await write_db.commit()

@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from app.services.cos import public_url, upload_video_bytes
+from app.services.video_barrage import VideoBarrageError, burn_bottom_barrage
 
 
 class VideoAssemblyError(Exception):
@@ -21,7 +22,12 @@ async def _download_video(url: str, dest: Path) -> None:
         dest.write_bytes(response.content)
 
 
-async def assemble_videos_from_urls(video_urls: list[str], *, script_id: int) -> dict[str, str]:
+async def assemble_videos_from_urls(
+    video_urls: list[str],
+    *,
+    script_id: int,
+    bottom_barrage_captions: list[str] | None = None,
+) -> dict[str, str]:
     if not video_urls:
         raise VideoAssemblyError("没有可整合的视频片段")
     if shutil.which("ffmpeg") is None:
@@ -33,9 +39,25 @@ async def assemble_videos_from_urls(video_urls: list[str], *, script_id: int) ->
         output = tmp_dir / "assembled.mp4"
         part_paths: list[Path] = []
 
+        captions = bottom_barrage_captions or []
+        use_barrage = len(captions) == len(video_urls) and any(c.strip() for c in captions)
+
         for i, url in enumerate(video_urls):
+            raw_part = tmp_dir / f"part_{i:03d}.raw.mp4"
             part = tmp_dir / f"part_{i:03d}.mp4"
-            await _download_video(url, part)
+            await _download_video(url, raw_part)
+            if use_barrage:
+                try:
+                    await asyncio.to_thread(
+                        burn_bottom_barrage,
+                        raw_part,
+                        part,
+                        caption=captions[i],
+                    )
+                except VideoBarrageError as exc:
+                    raise VideoAssemblyError(str(exc)) from exc
+            else:
+                part.write_bytes(raw_part.read_bytes())
             part_paths.append(part)
 
         list_file.write_text(

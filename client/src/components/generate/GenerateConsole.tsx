@@ -109,10 +109,21 @@ export default function GenerateConsole() {
   const [queueTab, setQueueTab] = useState<"queue" | "history">("queue");
   const [klingSettings, setKlingSettings] = useState<KlingSettings | undefined>();
   const [continuityEnabled, setContinuityEnabled] = useState(true);
+  const [bottomBarrageEnabled, setBottomBarrageEnabled] = useState(false);
 
   const updateContinuityMutation = useMutation({
     mutationFn: (enabled: boolean) =>
       api.patch<VideoScript>(`/scripts/${activeScriptId}`, { continuityEnabled: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["video-scripts"] });
+      queryClient.invalidateQueries({ queryKey: ["script-segments", activeScriptId] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateBottomBarrageMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api.patch<VideoScript>(`/scripts/${activeScriptId}`, { bottomBarrageEnabled: enabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["video-scripts"] });
       queryClient.invalidateQueries({ queryKey: ["script-segments", activeScriptId] });
@@ -137,6 +148,16 @@ export default function GenerateConsole() {
       }
     },
     [activeScriptId, updateContinuityMutation]
+  );
+
+  const handleBottomBarrageChange = useCallback(
+    (enabled: boolean) => {
+      setBottomBarrageEnabled(enabled);
+      if (activeScriptId != null) {
+        updateBottomBarrageMutation.mutate(enabled);
+      }
+    },
+    [activeScriptId, updateBottomBarrageMutation]
   );
 
   const handlePersonaChange = useCallback(
@@ -191,6 +212,11 @@ export default function GenerateConsole() {
     const value = scriptSegments?.continuityEnabled ?? activeScript?.continuityEnabled;
     if (value != null) setContinuityEnabled(value);
   }, [activeScript?.id, activeScript?.continuityEnabled, scriptSegments?.continuityEnabled]);
+
+  useEffect(() => {
+    const value = scriptSegments?.bottomBarrageEnabled ?? activeScript?.bottomBarrageEnabled;
+    if (value != null) setBottomBarrageEnabled(value);
+  }, [activeScript?.id, activeScript?.bottomBarrageEnabled, scriptSegments?.bottomBarrageEnabled]);
 
   useEffect(() => {
     if (activeScript?.personaId != null) {
@@ -607,6 +633,20 @@ export default function GenerateConsole() {
                     <span className="text-gray-300">镜头连贯性</span>
                     <span className="block text-[10px] text-gray-500 mt-0.5 leading-relaxed">
                       第 2 段起用上一段片尾帧作首帧；批量生成将按顺序等待，耗时更长
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-[11px] text-gray-400 cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={bottomBarrageEnabled}
+                    onChange={(e) => handleBottomBarrageChange(e.target.checked)}
+                    className="accent-[#55efc4] mt-0.5"
+                  />
+                  <span>
+                    <span className="text-gray-300">底部弹幕</span>
+                    <span className="block text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+                      整合成片时按口播分页轮播字幕（自动换行缩字），距底约 80px，长文案可完整看完
                     </span>
                   </span>
                 </label>

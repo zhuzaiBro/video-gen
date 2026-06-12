@@ -301,6 +301,16 @@ class TechScriptFromTopicIn(BaseModel):
     extra_query: str | None = Field(None, alias="extraQuery")
 
 
+class ScriptFromMarkdownIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    markdown: str = Field(min_length=20, max_length=80000)
+    title: str | None = Field(None, max_length=200)
+    persona_id: int | None = Field(None, alias="personaId")
+    target_duration_sec: int = Field(90, ge=30, le=300, alias="targetDurationSec")
+    extra_notes: str | None = Field(None, alias="extraNotes")
+
+
 class VideoScriptUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -310,6 +320,7 @@ class VideoScriptUpdate(BaseModel):
     decomposed_script: Any | None = Field(None, alias="decomposedScript")
     assembly_order: list[int] | None = Field(None, alias="assemblyOrder")
     continuity_enabled: bool | None = Field(None, alias="continuityEnabled")
+    bottom_barrage_enabled: bool | None = Field(None, alias="bottomBarrageEnabled")
     persona_id: int | None = Field(None, alias="personaId")
 
 
@@ -366,6 +377,7 @@ class ScriptSegmentsOut(CamelModel):
     segments: list[ScriptSegmentOut]
     assembly_order: list[int] = []
     continuity_enabled: bool = True
+    bottom_barrage_enabled: bool = False
     assembled_video_url: str | None = None
     all_segments_ready: bool = False
     max_kling_duration_sec: int = 15
@@ -454,6 +466,7 @@ class VideoScriptOut(CamelModel):
     error_message: str | None = None
     extra_metadata: dict | None = Field(default=None, serialization_alias="metadata")
     continuity_enabled: bool = True
+    bottom_barrage_enabled: bool = False
     script_duration_sec: int | None = None
     recommended_duration_sec: int | None = None
     max_kling_duration_sec: int | None = None
