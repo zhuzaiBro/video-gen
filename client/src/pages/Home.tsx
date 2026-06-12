@@ -1,270 +1,99 @@
-import { Card, Row, Col, Statistic, Button, Space, Tag, Empty } from "antd";
-import {
-  UserOutlined,
-  VideoCameraOutlined,
-  HistoryOutlined,
-  ArrowRightOutlined,
-  FileImageOutlined,
-  RobotOutlined,
-} from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import { User, Video, History, ArrowRight, Bot, HardDrive } from "lucide-react";
 import { useLocation } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { api, type GeneratedVideo, type Persona } from "@/lib/api";
+import {
+  ComfyPage,
+  ComfyPageHeader,
+  NodeCard,
+  btnPrimaryClass,
+  btnSecondaryClass,
+  btnGhostClass,
+} from "@/components/comfy-ui";
 
-/**
- * Dashboard home page with Ant Design
- */
 export default function Home() {
   const [, navigate] = useLocation();
 
-  // Fetch statistics
-  const { data: personasCount = 0 } = trpc.personas.list.useQuery();
-  const { data: videosData = [] } = trpc.history.listVideos.useQuery({
-    limit: 100,
+  const { data: personas = [] } = useQuery({
+    queryKey: ["personas"],
+    queryFn: () => api.get<Persona[]>("/personas"),
   });
 
-  const stats = {
-    personas: Array.isArray(personasCount) ? personasCount.length : 0,
-    videos: Array.isArray(videosData) ? videosData.length : 0,
-  };
+  const { data: videosData = [] } = useQuery({
+    queryKey: ["history", "videos"],
+    queryFn: () => api.get<GeneratedVideo[]>("/history/videos?limit=100"),
+  });
+
+  const stats = [
+    { title: "数字人设", value: personas.length, icon: User, accent: "#74b9ff" },
+    { title: "已生成视频", value: videosData.length, icon: Video, accent: "#00cec9" },
+    { title: "生成模式", value: 3, icon: Bot, accent: "#f89443" },
+    { title: "存储用量", value: "0 GB", icon: HardDrive, accent: "#a29bfe" },
+  ];
+
+  const shortcuts = [
+    { title: "管理人设", desc: "照片、自我介绍、抖音主页", path: "/personas", accent: "#74b9ff" },
+    { title: "生成工作室", desc: "文生视频 / 分镜成片工作流", path: "/generate", accent: "#f89443" },
+    { title: "脚本拆解", desc: "URL 拆解口播与分镜脚本", path: "/scripts", accent: "#a29bfe" },
+    { title: "视频历史", desc: "浏览与管理已生成视频", path: "/history", accent: "#00cec9" },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Welcome to Gemini Digital Human Agent - AI-Powered Video Generation Platform
-        </p>
+    <ComfyPage>
+      <ComfyPageHeader
+        title="控制台"
+        subtitle="AI 数字人视频生成平台 — 创建人设、生成视频、管理历史"
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map((s) => (
+          <NodeCard key={s.title} title={s.title} accent={s.accent}>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-bold text-gray-100 font-mono">{s.value}</span>
+              <s.icon className="w-5 h-5 opacity-40" style={{ color: s.accent }} />
+            </div>
+          </NodeCard>
+        ))}
       </div>
 
-      {/* Statistics */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Digital Personas"
-              value={stats.personas}
-              prefix={<UserOutlined />}
-              valueStyle={{ color: "#1890ff" }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Generated Videos"
-              value={stats.videos}
-              prefix={<VideoCameraOutlined />}
-              valueStyle={{ color: "#52c41a" }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Generation Modes"
-              value={3}
-              prefix={<RobotOutlined />}
-              valueStyle={{ color: "#faad14" }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Storage Used"
-              value="0 GB"
-              prefix={<FileImageOutlined />}
-              valueStyle={{ color: "#f5222d" }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <NodeCard title="快捷操作" accent="#f89443">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <button type="button" className={btnPrimaryClass} onClick={() => navigate("/personas")}>
+            <User className="w-4 h-4" /> 管理人设
+          </button>
+          <button type="button" className={btnSecondaryClass} onClick={() => navigate("/generate")}>
+            <Video className="w-4 h-4" /> 生成视频
+          </button>
+          <button type="button" className={btnSecondaryClass} onClick={() => navigate("/scripts")}>
+            脚本拆解
+          </button>
+          <button type="button" className={btnGhostClass} onClick={() => navigate("/history")}>
+            <History className="w-4 h-4" /> 查看历史
+          </button>
+        </div>
+      </NodeCard>
 
-      {/* Quick Actions */}
-      <Card title="Quick Actions" className="shadow-sm">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} lg={6}>
-            <Button
-              type="primary"
-              block
-              size="large"
-              icon={<UserOutlined />}
-              onClick={() => navigate("/personas")}
-            >
-              Manage Personas
-            </Button>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Button
-              type="default"
-              block
-              size="large"
-              icon={<VideoCameraOutlined />}
-              onClick={() => navigate("/generate")}
-            >
-              Generate Video
-            </Button>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Button
-              type="default"
-              block
-              size="large"
-              icon={<HistoryOutlined />}
-              onClick={() => navigate("/history")}
-            >
-              View History
-            </Button>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Button
-              type="dashed"
-              block
-              size="large"
-              onClick={() => navigate("/generate")}
-            >
-              Start Now
-            </Button>
-          </Col>
-        </Row>
-      </Card>
-
-      {/* Features Overview */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={8}>
-          <Card
-            hoverable
-            className="cursor-pointer"
-            onClick={() => navigate("/personas")}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {shortcuts.map((item) => (
+          <button
+            key={item.path}
+            type="button"
+            onClick={() => navigate(item.path)}
+            className="text-left rounded-lg border border-[#4a4a4a] bg-[#353535] hover:border-[#f89443]/50 hover:bg-[#3a3a3a] transition-colors overflow-hidden group"
           >
-            <div className="text-center">
-              <UserOutlined className="text-4xl text-blue-500 mb-4 block" />
-              <h3 className="text-lg font-semibold mb-2">Persona Management</h3>
-              <p className="text-gray-600 text-sm mb-4">
-                Create and manage digital human personas with detailed attributes
-              </p>
-              <Button type="link" icon={<ArrowRightOutlined />}>
-                Manage
-              </Button>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#4a4a4a] bg-[#2d2d2d]">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.accent }} />
+              <span className="text-xs font-semibold text-gray-200">{item.title}</span>
             </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={8}>
-          <Card
-            hoverable
-            className="cursor-pointer"
-            onClick={() => navigate("/generate")}
-          >
-            <div className="text-center">
-              <VideoCameraOutlined className="text-4xl text-green-500 mb-4 block" />
-              <h3 className="text-lg font-semibold mb-2">Video Generation</h3>
-              <p className="text-gray-600 text-sm mb-4">
-                Generate videos using prompts, reference images, or AI agents
-              </p>
-              <Button type="link" icon={<ArrowRightOutlined />}>
-                Generate
-              </Button>
+            <div className="p-3">
+              <p className="text-[11px] text-gray-500 leading-relaxed mb-2">{item.desc}</p>
+              <span className="inline-flex items-center gap-1 text-[10px] text-[#f89443] group-hover:gap-2 transition-all">
+                进入 <ArrowRight className="w-3 h-3" />
+              </span>
             </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={8}>
-          <Card
-            hoverable
-            className="cursor-pointer"
-            onClick={() => navigate("/history")}
-          >
-            <div className="text-center">
-              <HistoryOutlined className="text-4xl text-orange-500 mb-4 block" />
-              <h3 className="text-lg font-semibold mb-2">Video History</h3>
-              <p className="text-gray-600 text-sm mb-4">
-                Browse, manage, and download your generated videos
-              </p>
-              <Button type="link" icon={<ArrowRightOutlined />}>
-                Browse
-              </Button>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Generation Modes */}
-      <Card title="Three Generation Modes" className="shadow-sm">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={8}>
-            <Card type="inner" className="bg-blue-50">
-              <Tag color="blue" className="mb-3">
-                Mode 1
-              </Tag>
-              <h4 className="font-semibold mb-2">Prompt-Based</h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Input detailed prompts and let Gemini Veo 3.1 generate stunning videos with customizable parameters.
-              </p>
-              <Button type="primary" size="small" block>
-                Try It
-              </Button>
-            </Card>
-          </Col>
-
-          <Col xs={24} md={8}>
-            <Card type="inner" className="bg-green-50">
-              <Tag color="green" className="mb-3">
-                Mode 2
-              </Tag>
-              <h4 className="font-semibold mb-2">Reference Image</h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Upload reference images and combine with prompts for style-consistent video generation.
-              </p>
-              <Button type="primary" size="small" block>
-                Try It
-              </Button>
-            </Card>
-          </Col>
-
-          <Col xs={24} md={8}>
-            <Card type="inner" className="bg-orange-50">
-              <Tag color="orange" className="mb-3">
-                Mode 3
-              </Tag>
-              <h4 className="font-semibold mb-2">Persona Agent</h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Select a persona and let AI automatically expand attributes into detailed prompts.
-              </p>
-              <Button type="primary" size="small" block>
-                Try It
-              </Button>
-            </Card>
-          </Col>
-        </Row>
-      </Card>
-
-      {/* Getting Started */}
-      <Card title="Getting Started" className="shadow-sm">
-        <ol className="space-y-3 list-decimal list-inside">
-          <li className="text-gray-700">
-            <strong>Create a Persona</strong> - Go to Personas page and create your first digital human with custom attributes
-          </li>
-          <li className="text-gray-700">
-            <strong>Choose Generation Mode</strong> - Select from prompt-based, reference image, or AI agent mode
-          </li>
-          <li className="text-gray-700">
-            <strong>Configure Parameters</strong> - Set video duration, resolution, and aspect ratio
-          </li>
-          <li className="text-gray-700">
-            <strong>Generate Video</strong> - Click generate and monitor progress in the History page
-          </li>
-          <li className="text-gray-700">
-            <strong>Download & Share</strong> - Download your generated videos or share them directly
-          </li>
-        </ol>
-      </Card>
-
-      {/* Footer Info */}
-      <div className="text-center text-gray-500 text-sm py-4">
-        <p>Powered by Google Gemini Veo 3.1 | Supabase PostgreSQL | Tencent Cloud COS</p>
+          </button>
+        ))}
       </div>
-    </div>
+    </ComfyPage>
   );
 }

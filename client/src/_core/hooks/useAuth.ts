@@ -1,84 +1,80 @@
-import { getLoginUrl } from "@/const";
-import { trpc } from "@/lib/trpc";
-import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { api, type AppUser } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
-type UseAuthOptions = {
-  redirectOnUnauthenticated?: boolean;
-  redirectPath?: string;
+type AuthState = {
+  session: Session | null;
+  user: AppUser | null;
+  loading: boolean;
+  error: Error | null;
+  isAuthenticated: boolean;
 };
 
-export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
-    options ?? {};
-  const utils = trpc.useUtils();
+export function useAuth() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  const meQuery = trpc.auth.me.useQuery(undefined, {
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      utils.auth.me.setData(undefined, null);
-    },
-  });
-
-  const logout = useCallback(async () => {
-    try {
-      await logoutMutation.mutateAsync();
-    } catch (error: unknown) {
-      if (
-        error instanceof TRPCClientError &&
-        error.data?.code === "UNAUTHORIZED"
-      ) {
-        return;
-      }
-      throw error;
-    } finally {
-      utils.auth.me.setData(undefined, null);
-      await utils.auth.me.invalidate();
+  const fetchAppUser = useCallback(async (accessToken: string | undefined) => {
+    if (!accessToken) {
+      setUser(null);
+      return;
     }
-  }, [logoutMutation, utils]);
-
-  const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
-    return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
-    };
-  }, [
-    meQuery.data,
-    meQuery.error,
-    meQuery.isLoading,
-    logoutMutation.error,
-    logoutMutation.isPending,
-  ]);
+    try {
+      const appUser = await api.get<AppUser>("/auth/me");
+      setUser(appUser);
+      setError(null);
+    } catch (err) {
+      setUser(null);
+      setError(err instanceof Error ? err : new Error("Failed to fetch user"));
+    }
+  }, []);
 
   useEffect(() => {
-    if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
-    if (state.user) return;
-    if (typeof window === "undefined") return;
-    if (window.location.pathname === redirectPath) return;
+    let mounted = true;
 
-    window.location.href = redirectPath
-  }, [
-    redirectOnUnauthenticated,
-    redirectPath,
-    logoutMutation.isPending,
-    meQuery.isLoading,
-    state.user,
-  ]);
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      fetchAppUser(data.session?.access_token).finally(() => {
+        if (mounted) setLoading(false);
+      });
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setLoading(true);
+      fetchAppUser(nextSession?.access_token).finally(() => setLoading(false));
+    });
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, [fetchAppUser]);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+  }, []);
+
+  const state: AuthState = useMemo(
+    () => ({
+      session,
+      user,
+      loading,
+      error,
+      isAuthenticated: Boolean(session),
+    }),
+    [session, user, loading, error]
+  );
 
   return {
     ...state,
-    refresh: () => meQuery.refetch(),
+    refresh: () => fetchAppUser(session?.access_token),
     logout,
   };
 }

@@ -20,8 +20,8 @@ export const users = pgTable("users", {
    * Use this for relations between tables.
    */
   id: serial("id").primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  /** Supabase Auth user id (UUID). Unique per user. */
+  supabaseId: varchar("supabaseId", { length: 36 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
@@ -44,7 +44,15 @@ export const personas = pgTable("personas", {
   description: text("description"), // Physical appearance description
   personality: text("personality"), // Character traits and personality
   voiceStyle: varchar("voiceStyle", { length: 255 }), // Voice characteristics
+  voiceTone: varchar("voiceTone", { length: 64 }), // Preset voice tone id
+  voiceSampleKey: varchar("voiceSampleKey", { length: 512 }),
+  voiceSampleUrl: varchar("voiceSampleUrl", { length: 1024 }),
+  voiceSampleDescription: text("voiceSampleDescription"),
   backgroundStory: text("backgroundStory"), // Character background
+  selfIntroduction: text("selfIntroduction"), // 自我介绍
+  douyinProfileUrl: varchar("douyinProfileUrl", { length: 1024 }), // 抖音主页
+  expressionTone: varchar("expressionTone", { length: 64 }).default("subtle_natural").notNull(),
+  expressionNotes: text("expressionNotes"),
   referenceImageKey: varchar("referenceImageKey", { length: 512 }), // COS storage key for main reference image
   referenceImageUrl: varchar("referenceImageUrl", { length: 1024 }), // Accessible URL for reference image
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -62,6 +70,8 @@ export const referenceImages = pgTable("reference_images", {
   personaId: integer("personaId").notNull().references(() => personas.id, { onDelete: "cascade" }),
   imageKey: varchar("imageKey", { length: 512 }).notNull(), // COS storage key
   imageUrl: varchar("imageUrl", { length: 1024 }).notNull(), // Accessible URL
+  shotType: varchar("shotType", { length: 32 }).default("other").notNull(),
+  expression: varchar("expression", { length: 32 }).default("neutral").notNull(),
   uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
 });
 
@@ -116,3 +126,60 @@ export const generatedVideos = pgTable("generated_videos", {
 
 export type GeneratedVideo = typeof generatedVideos.$inferSelect;
 export type InsertGeneratedVideo = typeof generatedVideos.$inferInsert;
+
+/**
+ * Per-user Kling AI API settings (configured from frontend)
+ */
+export const klingSettings = pgTable("kling_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  accessKey: varchar("accessKey", { length: 128 }).notNull().default(""),
+  secretKey: varchar("secretKey", { length: 256 }).notNull().default(""),
+  apiBaseUrl: varchar("apiBaseUrl", { length: 512 }).notNull().default("https://api.klingai.com"),
+  modelName: varchar("modelName", { length: 64 }).notNull().default("kling-v2-6"),
+  defaultMode: varchar("defaultMode", { length: 16 }).notNull().default("std"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type KlingSettings = typeof klingSettings.$inferSelect;
+export type InsertKlingSettings = typeof klingSettings.$inferInsert;
+
+/**
+ * Video script analysis - decomposed scripts from source video URLs
+ */
+export const videoScripts = pgTable("video_scripts", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  personaId: integer("personaId").references(() => personas.id, { onDelete: "set null" }),
+  sourceUrl: varchar("sourceUrl", { length: 2048 }).notNull(),
+  platform: varchar("platform", { length: 32 }),
+  title: varchar("title", { length: 512 }),
+  rawTranscript: text("rawTranscript"),
+  decomposedScript: json("decomposedScript"),
+  summary: text("summary"),
+  status: taskStatusEnum("status").default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  metadata: json("metadata"),
+  continuityEnabled: boolean("continuityEnabled").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type VideoScript = typeof videoScripts.$inferSelect;
+export type InsertVideoScript = typeof videoScripts.$inferInsert;
+
+/**
+ * Tech topic search history — persisted hot-topic search results per user
+ */
+export const techTopicSearches = pgTable("tech_topic_searches", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  query: varchar("query", { length: 512 }),
+  topics: json("topics").notNull(),
+  topicCount: integer("topicCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TechTopicSearchRecord = typeof techTopicSearches.$inferSelect;
+export type InsertTechTopicSearchRecord = typeof techTopicSearches.$inferInsert;

@@ -9,6 +9,8 @@ import Home from "./pages/Home";
 import Personas from "./pages/Personas";
 import Generate from "./pages/Generate";
 import History from "./pages/History";
+import Scripts from "./pages/Scripts";
+import ScriptEditor from "./pages/ScriptEditor";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +21,8 @@ function Router() {
         <Route path={"/personas"} component={Personas} />
         <Route path={"/generate"} component={Generate} />
         <Route path={"/history"} component={History} />
+        <Route path={"/scripts"} component={Scripts} />
+        <Route path={"/scripts/:id/edit"} component={ScriptEditor} />
         <Route path={"/404"} component={NotFound} />
         {/* Final fallback route */}
         <Route component={NotFound} />
@@ -35,10 +39,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
           <Router />

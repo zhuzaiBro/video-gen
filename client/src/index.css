@@ -76,6 +76,12 @@
   --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.623 0.214 259.815);
+  /* ComfyUI 控制台滚动条 */
+  --scrollbar-size: 8px;
+  --scrollbar-track: #1a1a1a;
+  --scrollbar-thumb: #444444;
+  --scrollbar-thumb-hover: #555555;
+  --scrollbar-thumb-active: #4a9eff;
 }
 
 .dark {
@@ -116,10 +122,50 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: #1a1a1a;
+    color: #e5e5e5;
   }
+
+  /* 全局滚动条 — 与 ComfyUI 深色面板风格一致 */
+  *::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border: 2px solid var(--scrollbar-track);
+    border-radius: 9999px;
+    min-height: 2.5rem;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),

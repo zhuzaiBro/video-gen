@@ -153,6 +153,7 @@ function vitePluginManusDebugCollector(): Plugin {
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
 
 export default defineConfig({
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins,
   resolve: {
     alias: {
@@ -169,6 +170,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    port: 3000,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
     host: true,
     allowedHosts: [
       ".manuspre.computer",
